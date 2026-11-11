@@ -44,8 +44,7 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <button class="btn g" id="sv">Simpan pesanan</button><div class="msg" id="om"></div>
 <div class="ok" id="ook" hidden><span id="ot"></span><button class="btn" id="pdfb">Unduh PDF bukti pesanan</button></div></section>
 <section><h2>Sudah memesan <span id="tot"></span></h2><p class="mu">Nomor punggung tidak boleh sama dalam kategori yang sama (anak dengan dewasa boleh sama).</p><div class="tw"><table><thead><tr><th>Pemesan</th><th>WA</th><th>Nama punggung</th><th>No</th><th>Kategori</th><th>Tipe</th><th>Ukuran</th><th>Catatan</th><th class="ad" hidden></th></tr></thead><tbody id="tb"><tr><td colspan="8">Belum ada pesanan.</td></tr></tbody></table></div></section>
-<section class="adm" id="adm" hidden><h2>Admin</h2><p class="mu">Hanya muncul lewat alamat dengan #admin. Reset menghapus SEMUA pesanan (termasuk data lama) dan tidak bisa dibatalkan.</p>
-<button class="btn" id="seed">Muat data awal (12 pemain)</button>
+<section class="adm" id="adm" hidden><h2>Admin</h2><p class="mu">Hanya muncul lewat alamat dengan #admin. Reset menghapus semua pesanan yang diisi lewat link (data isi manual tetap ada) dan tidak bisa dibatalkan.</p>
 <button class="btn r" id="rst">Reset semua pemesan</button><div class="msg" id="am"></div></section>
 </main><footer>Data bisa diperbarui kapan saja dengan nomor WA yang sama.</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -59,6 +58,10 @@ const SIZES=['S','M','L','XL','XXL','3XL'];const MAXQ=10;
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const catL=c=>c==='dewasa'?'Dewasa':'Anak';const roleL=r=>r==='kiper'?'Kiper':'Pemain';
 let all=[],last=null;
+/* data yang sudah isi manual: [nama punggung, nomor (null=belum ada), ukuran, kategori] */
+const SEED=[['KALLANDRA',8,'XL','anak'],['VINO',9,'XL','anak'],['M BOBY',null,'XXL','anak'],['KAHFI',7,'XL','anak'],['AZZAM K',4,'L','anak'],['YOU - Q',10,'L','anak'],['DAFAA',1,'L','anak'],
+['GHAZY',null,'L','dewasa'],['BACHDIM',null,'M','dewasa'],['REIFAN',9,'M','dewasa'],['RAIHAN',20,'M','dewasa'],['ALDO',3,'L','dewasa']];
+const MANUAL=SEED.map(([np,no,size,cat],i)=>({id:'manual-'+(i+1),d:{pm:'Isi manual',wa:'',items:[{np,no,cat,role:'pemain',size,ct:''}]}}));
 const msg=t=>{$('om').textContent=t||''};
 
 /* ---------- form per jersey ---------- */
@@ -79,7 +82,7 @@ $('q').addEventListener('change',()=>renderItems(clampQ()));
 renderItems(1,[]);
 
 /* ---------- data dari Firestore ---------- */
-const flat=()=>{const r=[];all.forEach(o=>{if(!Array.isArray(o.d.items))return;o.d.items.forEach((it,k)=>r.push({id:o.id,k,pm:o.d.pm,wa:o.d.wa,...it}))});return r};
+const flat=()=>{const r=[];[...MANUAL,...all].forEach(o=>{if(!Array.isArray(o.d.items))return;o.d.items.forEach((it,k)=>r.push({id:o.id,k,pm:o.d.pm,wa:o.d.wa,...it}))});return r};
 function paint(){const rows=flat();const orders=new Set(rows.map(r=>r.id));
 $('tot').textContent='('+orders.size+' pemesan, '+rows.length+' pcs)';
 const tb=$('tb');tb.innerHTML='';
@@ -88,7 +91,7 @@ rows.sort((a,b)=>(a.cat>b.cat?1:a.cat<b.cat?-1:0)||((a.no==null?999:a.no)-(b.no=
 const adm=location.hash==='#admin';
 rows.forEach(r=>{const w=digits(r.wa);const tr=tb.insertRow();
 [r.pm||'-',w?w.slice(0,4)+'****'+w.slice(-3):'-',r.np||'-',r.no==null?'⚠ belum ada':r.no,catL(r.cat),roleL(r.role),r.size||'-',r.ct||'-'].forEach((v,i)=>{const c=tr.insertCell();c.textContent=v;if(i===3&&r.no==null)c.className='warn'});
-if(adm){const c=tr.insertCell();const b=document.createElement('button');b.className='btn r s';b.textContent='Hapus';b.onclick=()=>delItem(r);c.appendChild(b)}});
+if(adm&&!r.id.startsWith('manual-')){const c=tr.insertCell();const b=document.createElement('button');b.className='btn r s';b.textContent='Hapus';b.onclick=()=>delItem(r);c.appendChild(b)}});
 document.querySelectorAll('.ad').forEach(e=>e.hidden=!adm);
 const chips=(cat)=>{const n=rows.filter(r=>r.cat===cat&&r.no!=null).map(r=>r.no).sort((a,b)=>a-b);return '<div><b>'+catL(cat)+' terpakai:</b> '+(n.length?n.map(x=>'<span class="chip">'+x+'</span>').join(''):'-')+'</div>'};
 $('used').innerHTML=chips('anak')+chips('dewasa')}
@@ -118,7 +121,7 @@ if(wa.length<9||wa.length>15){msg('Nomor WA tidak valid (9-15 angka).');return}
 if(!pm){msg('Nama pemesan wajib diisi.');return}
 msg('Memeriksa nomor punggung...');
 try{const id='w'+wa;const snap=await getDocs(collection(db,COL));const now=snap.docs.map(d=>({id:d.id,d:d.data()}));
-const err=validate(items,id,now);if(err){msg(err);return}
+const err=validate(items,id,[...MANUAL,...now]);if(err){msg(err);return}
 const ex=now.some(o=>o.id===id&&Array.isArray(o.d.items));
 msg('Menyimpan...');
 await setDoc(doc(db,COL,id),{pm,wa,items,t:serverTimestamp()});
@@ -146,9 +149,4 @@ try{const o=all.find(x=>x.id===r.id);const items=o.d.items.filter((_,k)=>k!==r.k
 if(items.length)await setDoc(doc(db,COL,r.id),{...o.d,items});else await deleteDoc(doc(db,COL,r.id))}catch(e){alert('Gagal menghapus.')}}
 $('rst').onclick=async()=>{if(!confirm('Hapus SEMUA pesanan? Tidak bisa dibatalkan.'))return;
 am('Menghapus...');try{const s=await getDocs(collection(db,COL));await Promise.all(s.docs.map(d=>deleteDoc(d.ref)));am('Selesai: '+s.size+' dokumen dihapus.')}catch(e){am('Gagal reset (cek aturan Firestore).')}};
-const SEED=[
-['KALLANDRA',8,'XL','anak'],['VINO',9,'XL','anak'],['M BOBY',null,'XXL','anak'],['KAHFI',7,'XL','anak'],['AZZAM K',4,'L','anak'],['YOU - Q',10,'L','anak'],['DAFAA',1,'L','anak'],
-['GHAZY',null,'L','dewasa'],['BACHDIM',null,'M','dewasa'],['REIFAN',9,'M','dewasa'],['RAIHAN',20,'M','dewasa'],['ALDO',3,'L','dewasa']];
-$('seed').onclick=async()=>{if(!confirm('Muat 12 data awal? Pastikan sudah Reset dulu.'))return;
-am('Memuat...');try{await Promise.all(SEED.map(([np,no,size,cat],i)=>setDoc(doc(db,COL,'seed-'+(i+1)),{pm:'Data awal',wa:'',items:[{np,no,cat,role:'pemain',size,ct:''}],t:serverTimestamp()})));am('Selesai. Yang tanda ⚠ belum ada nomor: lengkapi lewat Hapus lalu pesan ulang, atau minta diperbarui.')}catch(e){am('Gagal memuat data awal.')}};
 </script></body></html>
