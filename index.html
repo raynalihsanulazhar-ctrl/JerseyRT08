@@ -45,7 +45,11 @@ select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;bac
 <div class="ok" id="ook" hidden><span id="ot"></span><button class="btn" id="pdfb">Unduh PDF bukti pesanan</button></div></section>
 <section><h2>Sudah memesan <span id="tot"></span></h2><p class="mu">Nomor punggung tidak boleh sama dalam kategori yang sama (anak dengan dewasa boleh sama).</p><div class="tw"><table><thead><tr><th>Pemesan</th><th>WA</th><th>Nama punggung</th><th>No</th><th>Kategori</th><th>Tipe</th><th>Ukuran</th><th>Catatan</th><th class="ad" hidden></th></tr></thead><tbody id="tb"><tr><td colspan="8">Belum ada pesanan.</td></tr></tbody></table></div><button class="btn" id="rkp">Unduh rekap pesanan (PDF)</button></section>
 <section class="adm" id="adm" hidden><h2>Admin</h2><p class="mu">Hanya muncul lewat alamat dengan #admin. Reset menghapus semua pesanan yang diisi lewat link (data isi manual tetap ada) dan tidak bisa dibatalkan.</p>
-<button class="btn r" id="rst">Reset semua pemesan</button><div class="msg" id="am"></div></section>
+<h3 style="margin:14px 0 4px;font-size:1rem">Tempel daftar dari WhatsApp</h3><p class="mu">Copy-paste seluruh daftar dari WA (Anak &amp; Dewasa). Daftar ini menggantikan data "isi manual" sebelumnya. Tidak perlu update repo.</p>
+<textarea id="wat" rows="10" placeholder="Anak&#10;1. Kallandra : xl anak (8)&#10;...&#10;Dewasa&#10;1. Ghazy : L Dewasa (22)"></textarea>
+<button class="btn" id="wap">Pratinjau</button><div class="msg" id="wam" style="color:var(--tx)"></div><div class="tw" id="wav"></div>
+<button class="btn g" id="was" hidden>Simpan ke daftar</button>
+<button class="btn r" id="rst" style="margin-top:22px">Reset semua pemesan</button><div class="msg" id="am"></div></section>
 </main><footer>Data bisa diperbarui kapan saja dengan nomor WA yang sama.</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
@@ -59,8 +63,8 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const catL=c=>c==='dewasa'?'Dewasa':'Anak';const roleL=r=>r==='kiper'?'Kiper':'Pemain';
 let all=[],last=null;
 /* data yang sudah isi manual: [nama punggung, nomor (null=belum ada), ukuran, kategori] */
-const SEED=[['KALLANDRA',8,'XL','anak'],['VINO',9,'XL','anak'],['M BOBY',null,'XXL','anak'],['KAHFI',7,'XL','anak'],['AZZAM K',4,'L','anak'],['YOU - Q',10,'L','anak'],['DAFAA',1,'L','anak'],
-['GHAZY',null,'L','dewasa'],['BACHDIM',null,'M','dewasa'],['REIFAN',9,'M','dewasa'],['RAIHAN',20,'M','dewasa'],['ALDO',3,'L','dewasa']];
+const SEED=[['KALLANDRA',8,'XL','anak'],['VINO',9,'XL','anak'],['M BOBY',null,'XXL','anak'],['KAHFI',7,'XL','anak'],['AZZAM K',4,'L','anak'],['YOU - Q',10,'L','anak'],['DAFAA',1,'XL','anak'],['TEGAR',21,'L','anak'],['GATAN',5,'M','anak'],['JOJO',6,'L','anak'],['FATHAN',33,'XL','anak'],['SALVADOR',31,'XL','anak'],['WISHANG',27,'','anak'],['ATHAYA',17,'XL','anak'],['ALVIN',19,'M','anak'],['BASTIAN',15,'M','anak'],['GIBRAN R',18,'XL','anak'],
+['GHAZY',22,'L','dewasa'],['BACHDIM',36,'M','dewasa'],['REIFAN',17,'M','dewasa'],['RAIHAN',20,'M','dewasa'],['ALDO',10,'L','dewasa'],['PUTRA',5,'XXL','dewasa'],['IZAZ',27,'XL','dewasa']];
 const MANUAL=SEED.map(([np,no,size,cat],i)=>({id:'manual-'+(i+1),d:{pm:'Isi manual',wa:'',items:[{np,no,cat,role:'pemain',size,ct:''}]}}));
 const msg=t=>{$('om').textContent=t||''};
 
@@ -82,7 +86,10 @@ $('q').addEventListener('change',()=>renderItems(clampQ()));
 renderItems(1,[]);
 
 /* ---------- data dari Firestore ---------- */
-const flat=()=>{const r=[];[...MANUAL,...all].forEach(o=>{if(!Array.isArray(o.d.items))return;o.d.items.forEach((it,k)=>r.push({id:o.id,k,pm:o.d.pm,wa:o.d.wa,...it}))});return r};
+const nk=(c,n)=>c+'|'+String(n||'').trim().toUpperCase();
+const manualFor=docs=>{const k=new Set();docs.forEach(o=>{if(o.id.startsWith('wa-')&&Array.isArray(o.d.items))o.d.items.forEach(it=>k.add(nk(it.cat,it.np)))});
+return MANUAL.filter(o=>!k.has(nk(o.d.items[0].cat,o.d.items[0].np)))};
+const flat=()=>{const r=[];[...manualFor(all),...all].forEach(o=>{if(!Array.isArray(o.d.items))return;o.d.items.forEach((it,k)=>r.push({id:o.id,k,pm:o.d.pm,wa:o.d.wa,...it}))});return r};
 function paint(){const rows=flat();const orders=new Set(rows.map(r=>r.id));
 $('tot').textContent='('+orders.size+' pemesan, '+rows.length+' pcs)';
 const tb=$('tb');tb.innerHTML='';
@@ -121,7 +128,7 @@ if(wa.length<9||wa.length>15){msg('Nomor WA tidak valid (9-15 angka).');return}
 if(!pm){msg('Nama pemesan wajib diisi.');return}
 msg('Memeriksa nomor punggung...');
 try{const id='w'+wa;const snap=await getDocs(collection(db,COL));const now=snap.docs.map(d=>({id:d.id,d:d.data()}));
-const err=validate(items,id,[...MANUAL,...now]);if(err){msg(err);return}
+const err=validate(items,id,[...manualFor(now),...now]);if(err){msg(err);return}
 const ex=now.some(o=>o.id===id&&Array.isArray(o.d.items));
 msg('Menyimpan...');
 await setDoc(doc(db,COL,id),{pm,wa,items,t:serverTimestamp()});
@@ -173,4 +180,39 @@ try{const o=all.find(x=>x.id===r.id);const items=o.d.items.filter((_,k)=>k!==r.k
 if(items.length)await setDoc(doc(db,COL,r.id),{...o.d,items});else await deleteDoc(doc(db,COL,r.id))}catch(e){alert('Gagal menghapus.')}}
 $('rst').onclick=async()=>{if(!confirm('Hapus SEMUA pesanan? Tidak bisa dibatalkan.'))return;
 am('Menghapus...');try{const s=await getDocs(collection(db,COL));await Promise.all(s.docs.map(d=>deleteDoc(d.ref)));am('Selesai: '+s.size+' dokumen dihapus.')}catch(e){am('Gagal reset (cek aturan Firestore).')}};
+
+/* ---------- admin: tempel daftar WA ---------- */
+function parseWA(text){const out=[];let cat='anak';
+for(let raw of text.split(/\r?\n/)){const line=raw.replace(/[“”"]/g,'"').trim();if(!line)continue;
+const h=line.match(/^(anak|dewasa)\b[\s:\-]*$/i);if(h){cat=h[1].toLowerCase();continue}
+const m=line.match(/^\d+\s*[.)]\s*(.+)$/);if(!m)continue;let body=m[1];
+let no=null;const nm=[...body.matchAll(/\(\s*(\d*)\s*\)/g)].pop();
+if(nm){if(nm[1]!=='')no=Number(nm[1]);body=body.slice(0,nm.index)+body.slice(nm.index+nm[0].length)}
+let c=cat;const cw=body.match(/\b(anak|dewasa)\b/i);if(cw){c=cw[1].toLowerCase();body=body.replace(cw[0],' ')}
+body=body.replace(/["']/g,' ');
+let name,size='';const SZ=/(?:^|[^A-Za-z0-9])(3XL|XXL|XL|L|M|S)(?![A-Za-z0-9])/i;
+const ci=body.indexOf(':');
+if(ci>=0){name=body.slice(0,ci);const sm=body.slice(ci+1).match(SZ);if(sm)size=sm[1].toUpperCase()}
+else{const sm=body.match(SZ);if(sm){size=sm[1].toUpperCase();name=body.slice(0,sm.index+(sm[0].length-sm[1].length))}else name=body}
+name=name.replace(/\s+/g,' ').trim().toUpperCase();if(!name)continue;
+out.push({np:name,no,cat:c,role:'pemain',size,ct:''})}
+return out}
+let parsed=[];
+$('wap').onclick=()=>{parsed=parseWA($('wat').value);const wm=$('wam');
+if(!parsed.length){wm.textContent='Tidak ada baris yang terbaca. Pastikan formatnya "1. Nama : ukuran (nomor)".';$('wav').innerHTML='';$('was').hidden=true;return}
+const seen={},warn=[];parsed.forEach((r,i)=>{if(!r.size)warn.push(r.np+': ukuran kosong');if(r.no==null)warn.push(r.np+': nomor kosong');
+else{const k=r.cat+'-'+r.no;if(k in seen)warn.push('Nomor '+r.no+' ('+catL(r.cat)+') dobel: '+parsed[seen[k]].np+' & '+r.np);seen[k]=i}});
+wm.textContent=parsed.length+' orang terbaca.'+(warn.length?' Perhatian: '+warn.join('; '):'');
+$('wav').innerHTML='<table><thead><tr><th>Nama</th><th>No</th><th>Kategori</th><th>Ukuran</th></tr></thead><tbody>'+parsed.map(r=>'<tr><td>'+esc(r.np)+'</td><td>'+(r.no==null?'⚠':r.no)+'</td><td>'+catL(r.cat)+'</td><td>'+(r.size||'⚠')+'</td></tr>').join('')+'</tbody></table>';
+$('was').hidden=false};
+$('was').onclick=async()=>{if(!parsed.length)return;
+if(!confirm('Simpan '+parsed.length+' orang? Daftar WA sebelumnya akan diganti.'))return;
+const wm=$('wam');wm.textContent='Menyimpan...';
+try{const s=await getDocs(collection(db,COL));const keep=new Set();
+const slug=t=>t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'x';const cnt={};
+for(const r of parsed){let id='wa-'+r.cat+'-'+slug(r.np);cnt[id]=(cnt[id]||0)+1;if(cnt[id]>1)id+='-'+cnt[id];keep.add(id);
+await setDoc(doc(db,COL,id),{pm:'Isi manual',wa:'',items:[r],t:serverTimestamp()})}
+const old=s.docs.filter(d=>d.id.startsWith('wa-')&&!keep.has(d.id));await Promise.all(old.map(d=>deleteDoc(d.ref)));
+wm.textContent='Selesai: '+parsed.length+' orang disimpan'+(old.length?', '+old.length+' data lama dihapus':'')+'.';$('was').hidden=true}
+catch(e){console.error(e);wm.textContent='Gagal menyimpan ['+(e.code||'error')+']. Cek aturan Firestore.'}};
 </script></body></html>
