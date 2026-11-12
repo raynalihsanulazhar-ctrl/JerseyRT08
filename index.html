@@ -88,7 +88,8 @@ renderItems(1,[]);
 /* ---------- data dari Firestore ---------- */
 const nk=(c,n)=>c+'|'+String(n||'').trim().toUpperCase();
 const manualFor=docs=>{const k=new Set();docs.forEach(o=>{if(o.id.startsWith('wa-')&&Array.isArray(o.d.items))o.d.items.forEach(it=>k.add(nk(it.cat,it.np)))});
-return MANUAL.filter(o=>!k.has(nk(o.d.items[0].cat,o.d.items[0].np)))};
+const hid=new Set(docs.filter(o=>o.id.startsWith('hide-')).map(o=>o.id.slice(5)));
+return MANUAL.filter(o=>!hid.has(o.id)&&!k.has(nk(o.d.items[0].cat,o.d.items[0].np)))};
 const flat=()=>{const r=[];[...manualFor(all),...all].forEach(o=>{if(!Array.isArray(o.d.items))return;o.d.items.forEach((it,k)=>r.push({id:o.id,k,pm:o.d.pm,wa:o.d.wa,...it}))});return r};
 function paint(){const rows=flat();const orders=new Set(rows.map(r=>r.id));
 $('tot').textContent='('+orders.size+' pemesan, '+rows.length+' pcs)';
@@ -98,7 +99,7 @@ rows.sort((a,b)=>(a.cat>b.cat?1:a.cat<b.cat?-1:0)||((a.no==null?999:a.no)-(b.no=
 const adm=location.hash==='#admin';
 rows.forEach(r=>{const w=digits(r.wa);const tr=tb.insertRow();
 [r.pm||'-',w?w.slice(0,4)+'****'+w.slice(-3):'-',r.np||'-',r.no==null?'⚠ belum ada':r.no,catL(r.cat),roleL(r.role),r.size||'-',r.ct||'-'].forEach((v,i)=>{const c=tr.insertCell();c.textContent=v;if(i===3&&r.no==null)c.className='warn'});
-if(adm&&!r.id.startsWith('manual-')){const c=tr.insertCell();const b=document.createElement('button');b.className='btn r s';b.textContent='Hapus';b.onclick=()=>delItem(r);c.appendChild(b)}});
+if(adm){const c=tr.insertCell();const b=document.createElement('button');b.className='btn r s';b.textContent='Hapus';b.onclick=()=>delItem(r);c.appendChild(b)}});
 document.querySelectorAll('.ad').forEach(e=>e.hidden=!adm);
 const chips=(cat)=>{const n=rows.filter(r=>r.cat===cat&&r.no!=null).map(r=>r.no).sort((a,b)=>a-b);return '<div><b>'+catL(cat)+' terpakai:</b> '+(n.length?n.map(x=>'<span class="chip">'+x+'</span>').join(''):'-')+'</div>'};
 $('used').innerHTML=chips('anak')+chips('dewasa')}
@@ -176,7 +177,8 @@ d.save('rekap-pesanan-jersey-rt08.pdf')};
 /* ---------- admin ---------- */
 const am=t=>{$('am').textContent=t||''};
 async function delItem(r){if(!confirm('Hapus '+(r.np||'jersey ini')+'?'))return;
-try{const o=all.find(x=>x.id===r.id);const items=o.d.items.filter((_,k)=>k!==r.k);
+try{if(r.id.startsWith('manual-')){await setDoc(doc(db,COL,'hide-'+r.id),{hide:true});return}
+const o=all.find(x=>x.id===r.id);const items=o.d.items.filter((_,k)=>k!==r.k);
 if(items.length)await setDoc(doc(db,COL,r.id),{...o.d,items});else await deleteDoc(doc(db,COL,r.id))}catch(e){alert('Gagal menghapus.')}}
 $('rst').onclick=async()=>{if(!confirm('Hapus SEMUA pesanan? Tidak bisa dibatalkan.'))return;
 am('Menghapus...');try{const s=await getDocs(collection(db,COL));await Promise.all(s.docs.map(d=>deleteDoc(d.ref)));am('Selesai: '+s.size+' dokumen dihapus.')}catch(e){am('Gagal reset (cek aturan Firestore).')}};
